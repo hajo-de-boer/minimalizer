@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minimalist Inventory</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f7f6f3;
+      --surface: #ffffff;
+      --border: #e5e3de;
+      --text: #1a1a1a;
+      --muted: #888;
+      --accent: #2d6a4f;
+      --accent-light: #e8f5ee;
+      --discard: #c0392b;
+      --discard-light: #fdf0ef;
+      --less: #2d6a4f;
+      --less-light: #e8f5ee;
+      --more: #c0392b;
+      --more-light: #fdf0ef;
+      --radius: 10px;
+      --shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    /* ── Layout ── */
+    .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; white-space: nowrap; }
+    header h1 span { color: var(--accent); }
+
+    /* ── Header: total display ── */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .total-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      line-height: 1;
+    }
+
+    .total-hero-number {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--text);
+    }
+
+    .total-hero-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .total-delta {
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .total-delta.less { color: var(--less); }
+    .total-delta.more { color: var(--more); }
+    .total-delta.neutral { color: var(--muted); }
+    .total-delta.unset { color: var(--muted); font-style: italic; font-weight: 400; }
+
+    .delta-arrow { font-size: 14px; line-height: 1; }
+
+    /* ── Header: mini stats ── */
+    .header-mini-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-left: 1px solid var(--border);
+      padding-left: 20px;
+    }
+
+    .mini-stat {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mini-stat strong { color: var(--text); font-size: 13px; }
+    .mini-stat.discard strong { color: var(--discard); }
+
+    /* ── Set starting number button ── */
+    .btn-start {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      transition: all .15s;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .btn-start:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .btn-start strong { font-size: 13px; font-weight: 600; color: var(--text); }
+    .btn-start:hover strong { color: var(--accent); }
+    .btn-start.is-set { border-style: solid; border-color: var(--border); }
+
+    .main-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0;
+      height: 100%;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 6px; padding: 0 4px; }
+
+    .cat-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      border-radius: 7px;
+      transition: background .15s;
+    }
+    .cat-row:hover { background: var(--bg); }
+    .cat-row:hover .cat-delete { opacity: 1; }
+    .cat-row.active { background: var(--accent-light); }
+
+    .cat-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text);
+      text-align: left;
+      transition: color .15s;
+      flex: 1;
+      min-width: 0;
+    }
+    .cat-row.active .cat-btn { color: var(--accent); font-weight: 600; }
+
+    .cat-btn .cat-count {
+      font-size: 11px;
+      background: var(--border);
+      border-radius: 99px;
+      padding: 1px 7px;
+      color: var(--muted);
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .cat-row.active .cat-count { background: var(--accent); color: #fff; }
+
+    .cat-delete {
+      opacity: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1;
+      padding: 4px 6px;
+      border-radius: 5px;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .cat-delete:hover { color: var(--discard); background: var(--discard-light); }
+
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 0; }
+
+    .add-cat-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .add-cat-row input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      background: var(--bg);
+      outline: none;
+    }
+    .add-cat-row input:focus { border-color: var(--accent); }
+    .add-cat-row button {
+      padding: 6px 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* ── Content ── */
+    .content {
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .toolbar h2 { font-size: 16px; font-weight: 700; flex: 1; }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+
+    .filter-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--border);
+      border-radius: 7px;
+      padding: 3px;
+    }
+    .filter-tab {
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      transition: all .15s;
+    }
+    .filter-tab.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+
+    /* ── Items Grid ── */
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .item-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      transition: box-shadow .15s;
+    }
+    .item-card:hover { box-shadow: var(--shadow); }
+    .item-card.is-discard { border-color: #f5c6c2; background: var(--discard-light); }
+
+    .item-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .item-name { font-size: 14px; font-weight: 600; line-height: 1.3; }
+    .item-qty { font-size: 12px; background: var(--bg); border-radius: 99px; padding: 2px 8px; color: var(--muted); white-space: nowrap; border: 1px solid var(--border); }
+    .item-card.is-discard .item-qty { background: #f5c6c2; border-color: #e8b0ab; color: var(--discard); }
+    .item-qty.is-collection { background: var(--accent-light); border-color: #b7dfc9; color: var(--accent); font-weight: 600; }
+    .item-card.is-discard .item-qty.is-collection { background: #f5c6c2; border-color: #e8b0ab; color: var(--discard); }
+
+    .item-cat-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: var(--accent-light);
+      color: var(--accent);
+      width: fit-content;
+      font-weight: 500;
+    }
+    .item-card.is-discard .item-cat-tag { background: #f5c6c2; color: var(--discard); }
+
+    .item-notes { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    .item-discard-badge {
+      font-size: 11px;
+      color: var(--discard);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .item-action {
+      flex: 1;
+      padding: 5px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--muted);
+      transition: all .15s;
+    }
+    .item-action:hover { background: var(--bg); }
+    .item-action.mark-discard { color: var(--discard); border-color: #f5c6c2; }
+    .item-action.mark-discard:hover { background: var(--discard-light); }
+    .item-action.unmark-discard { color: var(--accent); border-color: #b7dfc9; }
+    .item-action.unmark-discard:hover { background: var(--accent-light); }
+    .item-action.delete { color: var(--muted); }
+    .item-action.delete:hover { color: var(--discard); border-color: #f5c6c2; background: var(--discard-light); }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
+    .empty-state p { font-size: 14px; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.35);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .modal-backdrop.hidden { display: none; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 28px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.15);
+    }
+    .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 14px;
+    }
+    .form-group label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 14px;
+      outline: none;
+      background: var(--bg);
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { border-color: var(--accent); background: #fff; }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    .form-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-bottom: 14px;
+    }
+    .form-check input { width: 15px; height: 15px; accent-color: var(--discard); }
+
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+    /* ── Export / Import buttons ── */
+    .header-data-btns {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-data {
+      padding: 6px 11px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .btn-data:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .main-layout { grid-template-columns: 1fr; }
+      aside { border-right: none; border-bottom: 1px solid var(--border); padding: 14px; flex-direction: row; flex-wrap: wrap; gap: 6px; overflow-x: auto; }
+      aside h2 { width: 100%; }
+      .add-cat-row { width: 100%; }
+      .sidebar-divider { display: none; }
+      header { padding: 12px 16px; }
+      .content { padding: 16px; }
+      .total-hero-number { font-size: 28px; }
+      .header-mini-stats { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 8px; width: 100%; flex-direction: row; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <h1>Minimal<span>ist</span> Inventory</h1>
+    <div class="header-data-btns">
+      <button class="btn-data" onclick="exportData()" title="Exporteer je data als JSON-bestand">⬇ Export</button>
+      <button class="btn-data" onclick="document.getElementById('importFile').click()" title="Importeer een eerder opgeslagen JSON-bestand">⬆ Import</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" />
+    </div>
+    <div class="header-right" id="headerRight"></div>
+  </header>
+
+  <div class="main-layout">
+
+    <!-- Sidebar -->
+    <aside id="sidebar"></aside>
+
+    <!-- Content -->
+    <main class="content">
+      <div class="toolbar">
+        <h2 id="contentTitle">Alle items</h2>
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="setFilter('all',this)">Alle</button>
+          <button class="filter-tab" onclick="setFilter('keep',this)">Bewaren</button>
+          <button class="filter-tab" onclick="setFilter('discard',this)">Weggooien</button>
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Item toevoegen</button>
+      </div>
+
+      <!-- Items -->
+      <div class="items-grid" id="itemsGrid"></div>
+    </main>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-backdrop hidden" id="modalBackdrop" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="modalTitle">Item toevoegen</h3>
+    <div class="form-group">
+      <label>Naam</label>
+      <input type="text" id="fieldName" placeholder="bijv. Gietijzeren pan" />
+    </div>
+    <div class="form-group">
+      <label>Categorie</label>
+      <select id="fieldCategory"></select>
+    </div>
+    <div class="form-group">
+      <label>Aantal <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">— hoeveel losse items telt dit?</span></label>
+      <input type="number" id="fieldQty" min="1" value="1" placeholder="bijv. 30" />
+      <span class="form-hint">Voor collecties of sets — een bestekset van 24 telt als 24 items.</span>
+    </div>
+    <div class="form-group">
+      <label>Notitie <span style="font-weight:400;text-transform:none;letter-spacing:0">(optioneel)</span></label>
+      <textarea id="fieldNotes" placeholder="Staat, locatie, reden om weg te doen…"></textarea>
+    </div>
+    <label class="form-check">
+      <input type="checkbox" id="fieldDiscard" />
+      Markeren als "weg te doen"
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuleren</button>
+      <button class="btn btn-primary" id="modalSaveBtn" onclick="saveItem()">Item toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+const DEFAULT_CATEGORIES = ['Kitchen','Clothing','Books','Tools','Furniture'];
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('minimalist-inventory');
+    if (raw) {
+      const s = JSON.parse(raw);
+      // migrate: remove old goal field, ensure startingNumber exists
+      if (!('startingNumber' in s)) s.startingNumber = null;
+      delete s.goal;
+      return s;
+    }
+  } catch(e) {}
+  return {
+    items: [],
+    categories: [...DEFAULT_CATEGORIES],
+    startingNumber: null,
+    nextId: 1
+  };
+}
+
+function saveState() {
+  localStorage.setItem('minimalist-inventory', JSON.stringify(state));
+}
+
+let state = loadState();
+let activeCategory = 'all';
+let activeFilter = 'all';
+let editingId = null;
+
+// ── Counts ─────────────────────────────────────────────────────────
+function countItems(category) {
+  const items = category === 'all' ? state.items : state.items.filter(i => i.category === category);
+  return items.reduce((s, i) => s + (i.quantity || 1), 0);
+}
+
+function countDiscardItems(category) {
+  const items = category === 'all' ? state.items : state.items.filter(i => i.category === category);
+  return items.filter(i => i.toDiscard).reduce((s, i) => s + (i.quantity || 1), 0);
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function render() {
+  renderHeader();
+  renderSidebar();
+  renderItems();
+}
+
+function renderHeader() {
+  const total    = countItems('all');
+  const discard  = countDiscardItems('all');
+  const keep     = total - discard;
+  const sn       = state.startingNumber;
+
+  // Delta block
+  let deltaHtml = '';
+  if (sn === null) {
+    deltaHtml = `<div class="total-delta unset">Nog geen startnummer ingesteld</div>`;
+  } else {
+    const diff = total - sn;
+    if (diff === 0) {
+      deltaHtml = `<div class="total-delta neutral">— Gelijk aan de start (${sn})</div>`;
+    } else if (diff < 0) {
+      deltaHtml = `<div class="total-delta less"><span class="delta-arrow">↓</span>${Math.abs(diff)} minder dan bij de start</div>`;
+    } else {
+      deltaHtml = `<div class="total-delta more"><span class="delta-arrow">↑</span>${diff} meer dan bij de start</div>`;
+    }
+  }
+
+  // Starting number button label
+  const btnLabel = sn === null
+    ? `<strong>Stel startnummer in</strong><span>Gebruik huidige telling (${total})</span>`
+    : `<strong>Startnummer bijwerken</strong><span>Was ingesteld op ${sn}</span>`;
+
+  document.getElementById('headerRight').innerHTML = `
+    <div class="total-hero">
+      <div class="total-hero-number">${total}</div>
+      <div class="total-hero-label">items totaal</div>
+      ${deltaHtml}
+    </div>
+    <div class="header-mini-stats">
+      <div class="mini-stat"><strong>${keep}</strong> te bewaren</div>
+      <div class="mini-stat discard"><strong>${discard}</strong> weg te doen</div>
+    </div>
+    <button class="btn-start${sn !== null ? ' is-set' : ''}" onclick="setStartingNumber()">${btnLabel}</button>
+  `;
+}
+
+function renderSidebar() {
+  let html = `<h2>Categorieën</h2>`;
+  html += sidebarBtn('all', 'Alle items', countItems('all'), false);
+  html += `<div class="sidebar-divider"></div>`;
+  state.categories.forEach(cat => {
+    html += sidebarBtn(cat, cat, countItems(cat), true);
+  });
+  html += `<div class="sidebar-divider"></div>`;
+  html += `
+    <div style="padding:0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px">Categorie toevoegen</div>
+    <div class="add-cat-row">
+      <input type="text" id="newCatInput" placeholder="Naam…" onkeydown="if(event.key==='Enter')addCategory()" />
+      <button onclick="addCategory()">+</button>
+    </div>
+  `;
+  document.getElementById('sidebar').innerHTML = html;
+}
+
+function sidebarBtn(cat, label, count, deletable) {
+  const active = activeCategory === cat ? ' active' : '';
+  const deleteBtn = deletable
+    ? `<button class="cat-delete" onclick="deleteCategory('${escHtml(cat)}')" title="Categorie verwijderen">×</button>`
+    : '';
+  return `<div class="cat-row${active}">
+    <button class="cat-btn" onclick="setCategory('${escHtml(cat)}')">
+      <span>${escHtml(label)}</span>
+      <span class="cat-count">${count}</span>
+    </button>
+    ${deleteBtn}
+  </div>`;
+}
+
+function renderItems() {
+  let items = activeCategory === 'all'
+    ? state.items
+    : state.items.filter(i => i.category === activeCategory);
+
+  if (activeFilter === 'keep')    items = items.filter(i => !i.toDiscard);
+  if (activeFilter === 'discard') items = items.filter(i =>  i.toDiscard);
+
+  document.getElementById('contentTitle').textContent =
+    activeCategory === 'all' ? 'Alle items' : activeCategory;
+
+  if (items.length === 0) {
+    document.getElementById('itemsGrid').innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="icon">📦</div>
+        <p>Nog geen items hier.<br>Voeg je eerste item toe om te beginnen.</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('itemsGrid').innerHTML = items.map(item => {
+    const qty          = item.quantity || 1;
+    const discardClass = item.toDiscard ? ' is-discard' : '';
+    const qtyClass     = qty > 1 ? ' is-collection' : '';
+    const qtyLabel     = qty === 1 ? '1 item' : `📦 ${qty} items`;
+    const discardBadge = item.toDiscard ? `<div class="item-discard-badge">✕ Weg te doen</div>` : '';
+    const discardBtn   = item.toDiscard
+      ? `<button class="item-action unmark-discard" onclick="toggleDiscard(${item.id})">Bewaren</button>`
+      : `<button class="item-action mark-discard"   onclick="toggleDiscard(${item.id})">Weggooien</button>`;
+    const notes = item.notes ? `<div class="item-notes">${escHtml(item.notes)}</div>` : '';
+
+    return `
+      <div class="item-card${discardClass}">
+        <div class="item-card-header">
+          <div class="item-name">${escHtml(item.name)}</div>
+          <div class="item-qty${qtyClass}">${qtyLabel}</div>
+        </div>
+        <div class="item-cat-tag">${escHtml(item.category)}</div>
+        ${notes}
+        ${discardBadge}
+        <div class="item-actions">
+          ${discardBtn}
+          <button class="item-action" onclick="openEditModal(${item.id})">Bewerken</button>
+          <button class="item-action delete" onclick="deleteItem(${item.id})">Verwijderen</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Actions ────────────────────────────────────────────────────────
+function setCategory(cat) {
+  activeCategory = cat;
+  render();
+}
+
+function setFilter(filter, btn) {
+  activeFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderItems();
+}
+
+function setStartingNumber() {
+  const total = countItems('all');
+  state.startingNumber = total;
+  saveState();
+  renderHeader();
+}
+
+function deleteCategory(cat) {
+  const itemsInCat = state.items.filter(i => i.category === cat);
+  if (itemsInCat.length > 0) {
+    const fallback = state.categories.find(c => c !== cat);
+    const destination = fallback
+      ? `Items worden verplaatst naar "${fallback}".`
+      : 'Items in deze categorie worden ook verwijderd (er is geen andere categorie).';
+    if (!confirm(`Categorie "${cat}" heeft ${itemsInCat.length} item(s). ${destination}\n\nDoorgaan?`)) return;
+    if (fallback) {
+      state.items.forEach(i => { if (i.category === cat) i.category = fallback; });
+    } else {
+      state.items = state.items.filter(i => i.category !== cat);
+    }
+  }
+  state.categories = state.categories.filter(c => c !== cat);
+  if (activeCategory === cat) activeCategory = 'all';
+  saveState();
+  render();
+}
+
+function addCategory() {
+  const input = document.getElementById('newCatInput');
+  const name  = input.value.trim();
+  if (!name) return;
+  const normalized = name.charAt(0).toUpperCase() + name.slice(1);
+  if (state.categories.includes(normalized)) { input.value = ''; return; }
+  state.categories.push(normalized);
+  saveState();
+  input.value = '';
+  render();
+}
+
+function toggleDiscard(id) {
+  const item = state.items.find(i => i.id === id);
+  if (item) { item.toDiscard = !item.toDiscard; saveState(); render(); }
+}
+
+function deleteItem(id) {
+  if (!confirm('Dit item verwijderen?')) return;
+  state.items = state.items.filter(i => i.id !== id);
+  saveState();
+  render();
+}
+
+// ── Modal ──────────────────────────────────────────────────────────
+function populateCategorySelect(selected) {
+  document.getElementById('fieldCategory').innerHTML = state.categories.map(c =>
+    `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`
+  ).join('');
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent    = 'Item toevoegen';
+  document.getElementById('modalSaveBtn').textContent  = 'Item toevoegen';
+  document.getElementById('fieldName').value           = '';
+  document.getElementById('fieldQty').value            = '1';
+  document.getElementById('fieldNotes').value          = '';
+  document.getElementById('fieldDiscard').checked      = false;
+  populateCategorySelect(activeCategory !== 'all' ? activeCategory : state.categories[0]);
+  document.getElementById('modalBackdrop').classList.remove('hidden');
+  setTimeout(() => document.getElementById('fieldName').focus(), 50);
+}
+
+function openEditModal(id) {
+  const item = state.items.find(i => i.id === id);
+  if (!item) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent    = 'Item bewerken';
+  document.getElementById('modalSaveBtn').textContent  = 'Opslaan';
+  document.getElementById('fieldName').value           = item.name;
+  document.getElementById('fieldQty').value            = item.quantity || 1;
+  document.getElementById('fieldNotes').value          = item.notes || '';
+  document.getElementById('fieldDiscard').checked      = !!item.toDiscard;
+  populateCategorySelect(item.category);
+  document.getElementById('modalBackdrop').classList.remove('hidden');
+  setTimeout(() => document.getElementById('fieldName').focus(), 50);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalBackdrop')) return;
+  document.getElementById('modalBackdrop').classList.add('hidden');
+  editingId = null;
+}
+
+function saveItem() {
+  const name = document.getElementById('fieldName').value.trim();
+  if (!name) { document.getElementById('fieldName').focus(); return; }
+  const category  = document.getElementById('fieldCategory').value;
+  const quantity  = Math.max(1, parseInt(document.getElementById('fieldQty').value) || 1);
+  const notes     = document.getElementById('fieldNotes').value.trim();
+  const toDiscard = document.getElementById('fieldDiscard').checked;
+
+  if (editingId !== null) {
+    const item = state.items.find(i => i.id === editingId);
+    if (item) Object.assign(item, { name, category, quantity, notes, toDiscard });
+  } else {
+    state.items.push({ id: state.nextId++, name, category, quantity, notes, toDiscard });
+  }
+
+  saveState();
+  document.getElementById('modalBackdrop').classList.add('hidden');
+  editingId = null;
+  render();
+}
+
+// ── Export / Import ────────────────────────────────────────────────
+function exportData() {
+  const date = new Date().toISOString().slice(0, 10);
+  const json = JSON.stringify(state, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `minimalist-inventory-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported.items || !imported.categories) {
+        alert('Ongeldig bestand — dit lijkt geen Minimalist Inventory export te zijn.');
+        return;
+      }
+      if (!confirm(`Weet je het zeker? Je huidige data (${state.items.length} items) wordt vervangen door de import (${imported.items.length} items).`)) return;
+      state = imported;
+      if (!('startingNumber' in state)) state.startingNumber = null;
+      if (!('nextId' in state)) state.nextId = Math.max(0, ...state.items.map(i => i.id || 0)) + 1;
+      saveState();
+      activeCategory = 'all';
+      activeFilter   = 'all';
+      render();
+    } catch {
+      alert('Het bestand kon niet worden gelezen. Controleer of het een geldig JSON-bestand is.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset so the same file can be re-imported
+}
+
+// ── Utils ──────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('modalBackdrop').classList.add('hidden');
+  if (e.key === 'Enter' && !document.getElementById('modalBackdrop').classList.contains('hidden')) {
+    if (document.activeElement.tagName !== 'TEXTAREA') saveItem();
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
