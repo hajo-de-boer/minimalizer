@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "minimalist-inventory",
+      "runtimeExecutable": "/usr/bin/ruby",
+      "runtimeArgs": ["/tmp/serve.rb"],
+      "port": 3456
+    }
+  ]
+}
